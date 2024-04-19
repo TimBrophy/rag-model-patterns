@@ -1,0 +1,18 @@
+f"""Please answer the following question using only the documents provided as Context, if the answer is not in the context,
+        just say 'I do not know'.
+        Always cite the page of the document that you used as the source for your answer and give your confidence rating
+        on a scale of 1 to 10 in the following format
+        on a new line:
+        I am xx out of 10 confident in the accuracy my response.
+        // Examples:
+        // Question: What was total revenue for the previous Financial Year?
+        // Answer: On page 11 of the report, total revenue is reported as $11Bn, with a nett profit of 5%.
+        // Question: Who is the CEO of Big Corp Inc?
+        // Answer: On page 1 of the report, Jane Doe is listed as the CEO of Big Corp Inc.
+        Question:
+        {question}.
+        Context:
+        {context_documents}
+
+        Format your response using Markdown.
+        """

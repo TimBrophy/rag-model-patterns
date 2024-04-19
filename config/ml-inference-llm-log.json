@@ -1,0 +1,48 @@
+[
+  {
+    "remove": {
+      "field": "ml.inference.question_expanded",
+      "ignore_missing": true
+    }
+  },
+  {
+    "inference": {
+      "field_map": {
+        "question": "text_field"
+      },
+      "model_id": ".elser_model_2_linux-x86_64",
+      "target_field": "ml.inference.question_expanded",
+      "on_failure": [
+        {
+          "append": {
+            "field": "_source._ingest.inference_errors",
+            "allow_duplicates": false,
+            "value": [
+              {
+                "message": "Processor 'inference' in pipeline 'ml.inference.llm_logging' failed for field 'question' with message '{{ _ingest.on_failure_message }}'",
+                "pipeline": "ml.inference.llm_logging",
+                "timestamp": "{{{ _ingest.timestamp }}}"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  {
+    "append": {
+      "field": "_source._ingest.processors",
+      "value": [
+        {
+          "model_version": "11.0.0",
+          "pipeline": "ml.inference.llm_logging",
+          "processed_timestamp": "{{{ _ingest.timestamp }}}",
+          "types": [
+            "pytorch",
+            "text_expansion"
+          ]
+        }
+      ]
+    }
+  }
+]

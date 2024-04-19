@@ -1,0 +1,56 @@
+{
+    "properties": {
+        "@timestamp": {
+            "type": "date"
+        },
+        "question": {
+            "type": "text",
+            "fields": {
+                "keyword": {
+                    "type": "keyword"
+                }
+            }
+        },
+        "answer": {
+            "type": "text",
+            "fields": {
+                "keyword": {
+                    "type": "keyword"
+                }
+            }
+        },
+        "provider": {
+            "type": "keyword"
+        },
+        "model": {
+            "type": "keyword"
+        },
+        "timestamp_sent": {
+            "type": "date"
+        },
+        "timestamp_received": {
+            "type": "date"
+        },
+        "prompt_cost": {
+            "type": "float"
+        },
+        "response_cost": {
+            "type": "float"
+        },
+        "report_name": {
+            "type": "keyword"
+        },
+        "answer_type": {
+            "type": "keyword"
+        },
+        "llm_latency": {
+            "type": "float"
+        },
+        "pattern_name": {
+            "type": "keyword"
+        },
+        "similarity_score": {
+            "type": "float"
+        }
+    }
+}

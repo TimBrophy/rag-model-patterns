@@ -1,0 +1,48 @@
+[
+  {
+    "remove": {
+      "field": "ml.inference.text_expanded",
+      "ignore_missing": true
+    }
+  },
+  {
+    "inference": {
+      "field_map": {
+        "text": "text_field"
+      },
+      "model_id": ".elser_model_2_linux-x86_64",
+      "on_failure": [
+        {
+          "append": {
+            "field": "_source._ingest.inference_errors",
+            "allow_duplicates": false,
+            "value": [
+              {
+                "message": "Processor 'inference' in pipeline 'ml.inference.search-reports' failed for field 'text' with message '{{ _ingest.on_failure_message }}'",
+                "pipeline": "ml.inference.search-reports",
+                "timestamp": "{{{ _ingest.timestamp }}}"
+              }
+            ]
+          }
+        }
+      ],
+      "target_field": "ml.inference.text_expanded"
+    }
+  },
+  {
+    "append": {
+      "field": "_source._ingest.processors",
+      "value": [
+        {
+          "model_version": "11.0.0",
+          "pipeline": "ml.inference.search-reports",
+          "processed_timestamp": "{{{ _ingest.timestamp }}}",
+          "types": [
+            "pytorch",
+            "text_expansion"
+          ]
+        }
+      ]
+    }
+  }
+]
