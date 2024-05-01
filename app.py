@@ -1,5 +1,4 @@
 import datetime
-import json
 import uuid
 from datetime import timezone, datetime
 import streamlit as st
@@ -7,24 +6,23 @@ from elasticsearch import Elasticsearch
 import os
 import math
 import tiktoken
-import pandas as pd
 from langchain_community.chat_models import BedrockChat, AzureChatOpenAI
 
 from langchain.schema import (
     SystemMessage,
-    HumanMessage,
-    AIMessage
+    HumanMessage
 )
 import nltk
 from nltk.tokenize import word_tokenize
 import time
 import boto3
 import csv
+import pandas as pd
 
-BASE_URL = os.environ['openai_api_base']
-API_KEY = os.environ['openai_api_key']
-DEPLOYMENT_NAME = os.environ['deployment_name']
-TRANSFORMER_MODEL = os.environ['transformer_model']
+# BASE_URL = os.environ['openai_api_base']
+# API_KEY = os.environ['openai_api_key']
+# DEPLOYMENT_NAME = os.environ['deployment_name']
+# TRANSFORMER_MODEL = os.environ['transformer_model']
 qa_filename = os.environ['qa_filename']
 
 es = Elasticsearch(os.environ['elastic_url'], api_key=os.environ['elastic_api_key'])
@@ -37,11 +35,15 @@ benchmarking_index = os.environ['benchmarking_index']
 model_provider_map = [
     {
         'model_name': 'claude v2',
-        'provider_name': 'AWS Bedrock'
+        'provider_name': 'AWS Bedrock',
+        'prompt': 0.008,
+        'response': 0.024
     },
     {
         'model_name': 'gpt-35-turbo',
-        'provider_name': 'Azure OpenAI'
+        'provider_name': 'Azure OpenAI',
+        'prompt': 0.0005,
+        'response': 0.0015
     }
 ]
 pattern_explainer_map = [
@@ -60,21 +62,39 @@ pattern_explainer_map = [
     },
     {
         'pattern_name': 'auto-prompt-engineer',
-        'description': 'question --> design prompt --> output'
+        'description': 'question --> vectorsearch --> design prompt --> prompt + context --> response --> output'
     },
 ]
+
+
+def get_provider_from_model(model_name):
+    for p in model_provider_map:
+        if p['model_name'] == model_name:
+            provider = p['provider_name']
+    return provider
+
+
+def calculate_cost(message, type):
+    for p in model_provider_map:
+        if p['provider_name'] == st.session_state.provider_name:
+            cost_per_1k = p[type]
+    message_token_count = num_tokens_from_string(message, "cl100k_base")
+    billable_message_tokens = message_token_count / 1000
+    rounded_up_message_tokens = math.ceil(billable_message_tokens)
+    message_cost = rounded_up_message_tokens * cost_per_1k
+    return message_cost
 
 
 # Streamed response from LLM
 def llm_response(provider_name):
     if provider_name == 'Azure OpenAI':
         llm = AzureChatOpenAI(
-            openai_api_base=BASE_URL,
+            openai_api_base=os.environ['openai_api_base'],
             openai_api_version=os.environ['openai_api_version'],
-            deployment_name=DEPLOYMENT_NAME,
-            openai_api_key=API_KEY,
+            deployment_name=os.environ['deployment_name'],
+            openai_api_key=os.environ['openai_api_key'],
             openai_api_type="azure",
-            temperature=0,
+            temperature=st.session_state.model_temp,
             streaming=True
         )
     elif provider_name == 'AWS Bedrock':
@@ -85,7 +105,7 @@ def llm_response(provider_name):
             client=bedrock_client,
             model_id=os.environ['aws_model_id'],
             streaming=True,
-            model_kwargs={"temperature": 0})
+            model_kwargs={"temperature": st.session_state.model_temp})
 
     return llm
 
@@ -128,7 +148,7 @@ def get_sources(index):
 
 
 def report_search(index, question, source_name):
-    model_id = TRANSFORMER_MODEL
+    model_id = os.environ['transformer_model']
     query = {
         "bool": {
             "should": [
@@ -167,13 +187,6 @@ def report_search(index, question, source_name):
                 doc_data = {field: hit[field] for field in field_list if field in hit}
                 documents.append(doc_data)
     return documents
-
-
-def get_provider_from_model(model_name):
-    for p in model_provider_map:
-        if p['model_name'] == model_name:
-            provider = p['provider_name']
-    return provider
 
 
 def truncate_text(text, max_tokens):
@@ -267,6 +280,7 @@ def log_llm_interaction(question, prompt, response, sent_time, received_time, re
         "answer": response,
         "provider": st.session_state.provider_name,
         "model": st.session_state.model_name,
+        "model_temp": st.session_state.model_temp,
         "timestamp_sent": sent_time,
         "timestamp_received": received_time,
         "prompt_cost": calculate_cost(str_prompt, 'prompt'),
@@ -295,25 +309,6 @@ def log_benchmark_test(question, ground_truth, context, answer, report_name):
     }
     es.index(index=benchmarking_index, id=log_id, document=body)
     return
-
-
-def calculate_cost(message, type):
-    rate_card = {
-        'Azure OpenAI': {
-            'prompt': 0.003,
-            'response': 0.004
-        },
-        'AWS Bedrock': {
-            'prompt': 0.008,
-            'response': 0.024
-        }
-    }
-    cost_per_1k = rate_card[st.session_state.provider_name][type]
-    message_token_count = num_tokens_from_string(message, "cl100k_base")
-    billable_message_tokens = message_token_count / 1000
-    rounded_up_message_tokens = math.ceil(billable_message_tokens)
-    message_cost = rounded_up_message_tokens * cost_per_1k
-    return message_cost
 
 
 def num_tokens_from_string(string: str, encoding_name: str) -> int:
@@ -363,7 +358,11 @@ def execute_benchmark():
                 prompt_construct = prompt_builder(question=question, results=results,
                                                   pattern=st.session_state.pattern_name)
                 llm = llm_response(st.session_state.provider_name)
+                sent_time = datetime.now(tz=timezone.utc)
                 answer = bulk_response(llm=llm, prompt=prompt_construct)
+                received_time = datetime.now(tz=timezone.utc)
+                log_llm_interaction(question, prompt_construct, answer, sent_time, received_time,
+                                    report_source)
                 log_benchmark_test(question=question, ground_truth=ground_truth, context=results,
                                    report_name=report_source,
                                    answer=answer)
@@ -371,23 +370,43 @@ def execute_benchmark():
                 prompt_construct1 = prompt_builder(question=question, results=results,
                                                    pattern=st.session_state.pattern_name)
                 llm = llm_response(st.session_state.provider_name)
+                sent_time = datetime.now(tz=timezone.utc)
                 answer1 = bulk_response(llm=llm, prompt=prompt_construct1)
+                received_time = datetime.now(tz=timezone.utc)
+                log_llm_interaction(question, prompt_construct1, answer1, sent_time, received_time,
+                                    report_source)
                 prompt_construct2 = prompt_builder(question=question, results=results, pattern='reflection-rag',
                                                    answer=answer1)
+                sent_time = datetime.now(tz=timezone.utc)
                 answer2 = bulk_response(llm=llm, prompt=prompt_construct2)
+                received_time = datetime.now(tz=timezone.utc)
+                log_llm_interaction(question, prompt_construct2, answer2, sent_time, received_time,
+                                    report_source)
                 prompt_construct3 = prompt_builder(question=question, results=results, pattern='guided-rag',
                                                    answer=answer1, reflection=answer2)
+                sent_time = datetime.now(tz=timezone.utc)
                 answer3 = bulk_response(llm=llm, prompt=prompt_construct3)
+                received_time = datetime.now(tz=timezone.utc)
+                log_llm_interaction(question, prompt_construct3, answer3, sent_time, received_time,
+                                    report_source)
                 log_benchmark_test(question=question, ground_truth=ground_truth, context=results,
                                    report_name=report_source,
                                    answer=answer3)
             elif st.session_state.pattern_name == 'auto-prompt-engineer':
                 prompt_construct1 = prompt_builder(question=question, pattern=st.session_state.pattern_name)
                 llm = llm_response(st.session_state.provider_name)
+                sent_time = datetime.now(tz=timezone.utc)
                 answer1 = bulk_response(llm=llm, prompt=prompt_construct1)
+                received_time = datetime.now(tz=timezone.utc)
+                log_llm_interaction(question, prompt_construct1, answer1, sent_time, received_time,
+                                    report_source)
                 prompt_construct2 = prompt_builder(question=question, pattern='generated-prompt', results=results,
                                                    reflection=answer1)
+                sent_time = datetime.now(tz=timezone.utc)
                 answer2 = bulk_response(llm=llm, prompt=prompt_construct2)
+                received_time = datetime.now(tz=timezone.utc)
+                log_llm_interaction(question, prompt_construct2, answer2, sent_time, received_time,
+                                    report_source)
                 log_benchmark_test(question=question, ground_truth=ground_truth, context=results,
                                    report_name=report_source,
                                    answer=answer2)
@@ -395,30 +414,48 @@ def execute_benchmark():
 
     return
 
-st.sidebar.page_link("app.py", label="Switch accounts")
-st.title("Model pattern experiment-_er_ :sunglasses:")
+
+st.set_page_config(
+    page_title="Document reader",
+    page_icon="🧊",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+st.sidebar.page_link("app.py", label="Home")
+st.sidebar.page_link("pages/import.py", label="Manage reports/data sources")
+st.sidebar.page_link("pages/benchmark.py", label="Run a benchmark test")
+st.sidebar.page_link("pages/setup.py", label="Setup your Elastic environment")
+st.sidebar.page_link(os.environ['kibana_url'], label="Kibana")
+
+
 
 col1, col2 = st.columns([1, 3])
 with col1:
-    st.session_state['pattern_name'] = st.selectbox('Choose your pattern', pattern_list)
-    st.session_state['model_name'] = st.selectbox('Choose your model', model_list)
+    st.header("Set your parameters")
+    st.session_state['pattern_name'] = st.selectbox('Choose a prompt template', pattern_list)
+    st.session_state['model_name'] = st.selectbox('Choose a model', model_list)
     st.session_state['provider_name'] = get_provider_from_model(st.session_state.model_name)
-    for pattern in pattern_explainer_map:
-        if pattern['pattern_name'] == st.session_state['pattern_name']:
-            st.write('Prompt workflow:')
-            st.write(pattern['description'])
+    # for pattern in pattern_explainer_map:
+    #     if pattern['pattern_name'] == st.session_state['pattern_name']:
+    #         st.write('Prompt workflow:')
+    #         st.write(pattern['description'])
     report_source = st.selectbox("Choose your source document", get_sources(source_index))
-    benchmark = st.button("Execute benchmark")
+    model_temp_options = [i/100 for i in range(0, 101, 5)]
+    st.session_state['model_temp'] = st.select_slider('Select your model temperature:', options=model_temp_options)
+    benchmark = st.button("Create benchmark data")
 
 with col2:
     if benchmark:
         execute_benchmark()
+    st.header("Conversational document search")
     # Accept user input
-    question = st.text_input("Ask your question")
+    question = st.text_input("Ask a question")
     submit = st.button("Ask the assistant")
     if submit:
 
         results = report_search(source_index, question, report_source)
+        df_results = pd.DataFrame(results)
         llm = llm_response(st.session_state.provider_name)
 
         if results:
@@ -430,9 +467,6 @@ with col2:
                 response = st.write_stream(
                     yield_response(llm=llm, prompt=prompt_construct))
                 received_time = datetime.now(tz=timezone.utc)
-
-                # Add assistant response to chat history
-                st.session_state.messages.append({"role": "assistant", "content": response})
                 # Log the interaction
                 log_llm_interaction(question, prompt_construct, response, sent_time, received_time,
                                     report_source)
@@ -445,8 +479,6 @@ with col2:
                 response = st.write_stream(
                     yield_response(llm=llm, prompt=prompt_construct))
                 received_time = datetime.now(tz=timezone.utc)
-                # Add assistant response to chat history
-                st.session_state.messages.append({"role": "assistant", "content": response})
                 # Log the interaction
                 log_llm_interaction(question, prompt_construct, response, sent_time, received_time,
                                     report_source)
@@ -461,8 +493,6 @@ with col2:
                         yield_response(llm=llm, prompt=prompt_construct))
                     received_time = datetime.now(tz=timezone.utc)
                     status.update(label="response generated", state="complete")
-                    # Add assistant response to chat history
-                    st.session_state.messages.append({"role": "assistant", "content": response1})
                     # Log the interaction
                     log_llm_interaction(question, prompt_construct, response1, sent_time, received_time,
                                         report_source)
@@ -477,8 +507,6 @@ with col2:
                         yield_response(llm=llm, prompt=prompt_construct))
                     received_time = datetime.now(tz=timezone.utc)
                     status.update(label="response reviewed", state="complete")
-                    # Add assistant response to chat history
-                    st.session_state.messages.append({"role": "assistant", "content": response2})
                     # Log the interaction
                     log_llm_interaction(question, prompt_construct, response2, sent_time, received_time,
                                         report_source)
@@ -493,8 +521,6 @@ with col2:
                         yield_response(llm=llm, prompt=prompt_construct))
                     received_time = datetime.now(tz=timezone.utc)
                     status.update(label="response completed", state="complete")
-                    # Add assistant response to chat history
-                    st.session_state.messages.append({"role": "assistant", "content": response3})
                     # Log the interaction
                     log_llm_interaction(question, prompt_construct, response3, sent_time, received_time,
                                         report_source)
@@ -507,8 +533,6 @@ with col2:
                     response1 = st.write_stream(
                         yield_response(llm=llm, prompt=prompt_construct))
                     received_time = datetime.now(tz=timezone.utc)
-                    # Add assistant response to chat history
-                    st.session_state.messages.append({"role": "prompt engineer", "content": response1})
                     # Log the interaction
                     log_llm_interaction(question, prompt_construct, response1, sent_time, received_time,
                                         report_source)
@@ -520,10 +544,9 @@ with col2:
                     response2 = st.write_stream(
                         yield_response(llm=llm, prompt=prompt_construct))
                     received_time = datetime.now(tz=timezone.utc)
-                    # Add assistant response to chat history
-                    st.session_state.messages.append({"role": "prompt engineer", "content": response2})
                     # Log the interaction
                     log_llm_interaction(question, prompt_construct, response2, sent_time, received_time,
                                         report_source)
+            st.dataframe(df_results)
         else:
             st.write("your search yielded zero results")

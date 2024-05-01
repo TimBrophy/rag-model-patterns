@@ -1,0 +1,11 @@
+f"""
+Please answer the following question using only the documents provided as context, if the answer is not in the context, just say 'I do not know'.
+Always cite the page of the document that you used as the source for your answer and give your confidence rating
+on a scale of 1 to 10 in the following format on a new line:
+I am xx out of 10 confident in the accuracy my response.
+Here is the question:
+{question}
+Here is the context:
+{context_documents}
+Format your response using Markdown, making important words bold.
+"""

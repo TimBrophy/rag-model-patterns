@@ -1,0 +1,9 @@
+f"""
+A user has asked the following question:
+{question}
+Follow the following instructions when providing an answer:
+{reflection}
+You are only allowed to answer using information in the following context:
+{context_documents}
+Format your response using Markdown, making important words bold.
+"""

@@ -1,18 +1,18 @@
-f"""Please answer the following question using only the documents provided as Context, if the answer is not in the context,
-        just say 'I do not know'.
-        Always cite the page of the document that you used as the source for your answer and give your confidence rating
-        on a scale of 1 to 10 in the following format
-        on a new line:
-        I am xx out of 10 confident in the accuracy my response.
-        // Examples:
-        // Question: What was total revenue for the previous Financial Year?
-        // Answer: On page 11 of the report, total revenue is reported as $11Bn, with a nett profit of 5%.
-        // Question: Who is the CEO of Big Corp Inc?
-        // Answer: On page 1 of the report, Jane Doe is listed as the CEO of Big Corp Inc.
-        Question:
-        {question}.
-        Context:
-        {context_documents}
-
-        Format your response using Markdown.
-        """
+f"""
+Please answer the following question using only the documents provided as context, if the answer is not in the context, just say 'I do not know'.
+Always cite the page of the document that you used as the source for your answer and give your confidence rating on a scale of 1 to 10 in the following format on a new line:
+I am xx out of 10 confident in the accuracy my response.
+Here are some examples:
+// Question: What was total revenue for the reported Financial Year?
+// Context: "Page 11: lorem ipsum. Finally, we saw an increase in total revenue this year versus the previous year, rising from $10Bn to $11Bn, accompanied by an increase in net profit to 5%. Finally as we shall see,"
+// Answer: On page 11 of the report, total revenue is reported as $11Bn, with a nett profit of 5%.
+// Question: Who is the CEO of Big Corp Inc?
+// Context: "Page 1: intended outcome. Many thanks for the ongoing contributions of our team, our board and our partners, we had a great year. CFO Jim Jones and COO Mabel Maybe continued to execute on operations while CEO Jane Doe has provided overall leadership that has resulted in our success."
+// Answer: On page 1 of the report, Jane Doe is listed as the CEO of Big Corp Inc.
+Now here is the actual question and context you need to respond with:
+Question:
+{question}.
+Context:
+{context_documents}
+Format your response using Markdown, highlighting important words in bold.
+"""

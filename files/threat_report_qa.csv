@@ -1,4 +1,4 @@
-question,ground_truths
+question,ground_truth
 what is the primary intention of ICEDID?,"Login credentials, banking and personal information."
 Which backdoors does REF2924 use to exploit it's target?,"DOORME, SIESTAGRAPH, and SHADOWPAD each implement different functions that can be used to gain and maintain unauthorized access to an environment. It is important to note that these backdoors can be used to steal sensitive information, disrupt operations, and gain a persistent presence in a victim environment."
 what is the most used malware family?,Gafgyt is the most prevalent malware family.

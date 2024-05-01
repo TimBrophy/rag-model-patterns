@@ -12,7 +12,10 @@
             "type": "text"
         },
         "page": {
-            "type": "int"
+            "type": "integer"
+        },
+        "chunk_size": {
+            "type": "integer"
         },
         "ml": {
             "properties": {

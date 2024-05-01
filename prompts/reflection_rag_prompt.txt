@@ -1,10 +1,13 @@
-f"""A user has asked the following question:
-        {question}
-        And a Large Language Model has responded with the following answer:
-        {answer}
-        This answer was based on this context, as the model was intructed to answer based on only the context provided and nothing else:
-        Context:
-        {context_documents}
-        How would you improve the response?
-        Format your response using Markdown.
-        """
+f"""
+A user has asked the following question:
+{question}
+
+And a Large Language Model has responded with the following answer:
+{answer}
+
+This answer was based on this context, as the model was instructed to answer based on only the context provided and nothing else:
+{context_documents}
+
+Consider how you would improve the response and provide an improved prompt to get the best answer from the model, using data from the context documents.
+
+"""

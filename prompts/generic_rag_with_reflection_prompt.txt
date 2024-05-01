@@ -1,0 +1,11 @@
+f"""
+You have answered this question before: {question}.
+This was your answer:
+{answer}
+
+Your answer was reviewed and the provided prompt has been rewritten as follows:
+{reflection}
+
+Use the following context documents and answer only using data contained in them:
+Format your response using Markdown, making important words bold.
+"""

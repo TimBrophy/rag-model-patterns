@@ -1,0 +1,44 @@
+{
+    "properties": {
+        "@timestamp": {
+            "type": "date"
+        },
+        "question": {
+            "type": "text",
+            "fields": {
+                "keyword": {
+                    "type": "keyword"
+                }
+            }
+        },
+        "ground_truth": {
+            "type": "text",
+            "fields": {
+                "keyword": {
+                    "type": "keyword"
+                }
+            }
+        },
+        "contexts": {
+            "type": "text"
+        },
+        "answer": {
+            "type": "text"
+        },
+        "provider": {
+            "type": "keyword"
+        },
+        "model": {
+            "type": "keyword"
+        },
+        "model_temp": {
+            "type": "float"
+        },
+        "report_name": {
+            "type": "keyword"
+        },
+        "pattern_name": {
+            "type": "keyword"
+        }
+    }
+}

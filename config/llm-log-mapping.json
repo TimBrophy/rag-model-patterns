@@ -25,6 +25,10 @@
         "model": {
             "type": "keyword"
         },
+        "model_temp": {
+            "type": "float"
+        },
+
         "timestamp_sent": {
             "type": "date"
         },
@@ -48,9 +52,6 @@
         },
         "pattern_name": {
             "type": "keyword"
-        },
-        "similarity_score": {
-            "type": "float"
         }
     }
 }

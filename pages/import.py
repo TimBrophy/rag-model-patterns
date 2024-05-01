@@ -4,14 +4,78 @@ import os
 from PyPDF2 import PdfReader
 import math
 import uuid
+from langchain_text_splitters import CharacterTextSplitter
+
 
 es = Elasticsearch(os.environ['elastic_url'],
                    api_key=os.environ['elastic_api_key'])
-report_index = 'search-reports'
-report_pipeline = 'ml-inference-search-reports'
+report_index = os.environ['default_index']
+report_pipeline = os.environ['default_pipeline']
+chunk_size_options = ['128', '256', '512', '1024']
+source_index = os.environ['default_index']
 
-report_name = st.text_input("Report name")
+st.sidebar.page_link("app.py", label="Home")
+st.sidebar.page_link("pages/import.py", label="Manage reports/data sources")
+st.sidebar.page_link("pages/benchmark.py", label="Run a benchmark test")
+st.sidebar.page_link("pages/setup.py", label="Setup your Elastic environment")
+st.sidebar.page_link(os.environ['kibana_url'], label="Kibana")
+
+
+# aggregate the names of all reports stored in the index
+def get_sources(index):
+    aggregation_query = {
+        "size": 0,
+        "query": {
+            "match_all": {
+            }
+        },
+        "aggs": {
+            "sources": {
+                "terms": {
+                    "field": "source_name.keyword",
+                    "size": 1000
+                }
+            }
+        }
+    }
+    sources = es.search(index=index, body=aggregation_query)
+    buckets = sources['aggregations']['sources']['buckets']
+    source_list = []
+    for bucket in buckets:
+        key = bucket['key']
+        source_list.append(key)
+    return source_list
+
+
+def delete_report(report):
+    delete_query = {
+        "term": {
+            "source_name.keyword": {
+                "value": report
+            }
+        }
+    }
+    delete_response = es.delete_by_query(index=source_index, query=delete_query)
+    return delete_response
+
+
+st.title("Document uploader")
+source_name = st.text_input("Source document name")
 uploaded_file = st.file_uploader("Choose a file:")
+chunk_size = st.select_slider('Select your document chunk size (in words):', options=chunk_size_options)
+chunk_size = int(chunk_size)
+chunk_overlap = chunk_size/5
+text_splitter = CharacterTextSplitter(
+    separator="\n\n",
+    chunk_size=chunk_size,
+    chunk_overlap=chunk_overlap,
+    length_function=len,
+    is_separator_regex=False,
+)
+
+st.subheader("Existing data sources:")
+existing_sources = get_sources(source_index)
+
 if uploaded_file is not None:
     reader = PdfReader(uploaded_file)
     number_of_pages = len(reader.pages)
@@ -25,36 +89,31 @@ if uploaded_file is not None:
                 if selected_page is not None:
                     page = reader.pages[selected_page]
                     text = page.extract_text()
-                    words = text.split()
-                    total_words = len(words)
-                    if total_words > 0:
-                        doc_sections = math.ceil(total_words / 128)
-                        words_per_section = total_words // doc_sections
-                        sections = []
-                        start_index = 0
-                        for _ in range(doc_sections - 1):
-                            end_index = start_index + words_per_section
-                            next_full_stop = text.find('.', start_index, end_index)
-                            if next_full_stop != -1:
-                                end_index = next_full_stop + 1
-                            section = " ".join(words[start_index:end_index])
-                            sections.append(section)
-                            start_index = end_index
-                        final_section = " ".join(words[start_index:])
-                        sections.append(final_section)
-                        for i, section in enumerate(sections):
-                            st.write(f"Page number: {selected_page + 1}")
-                            st.write(section)
+                    contexts = text_splitter.split_text(text)
+                    for i, chunked_text in enumerate(contexts):
+                        words = chunked_text.split()
+                        total_words = len(words)
+                        if total_words > 0:
                             doc_id = uuid.uuid4()
                             doc = {
-                                "report_name": report_name,
-                                "text": section,
+                                "source_name": source_name,
+                                "text": chunked_text,
                                 "page": selected_page + 1,
+                                "chunk_size": int(chunk_size),
                                 "_extract_binary_content": True,
                                 "_reduce_whitespace": True,
                                 "_run_ml_inference": True
                             }
                             response = es.index(index=report_index, id=doc_id, document=doc, pipeline=report_pipeline)
-                            # st.write(doc)
+                            st.write(chunked_text)
                     counter = counter + 1
+            status.update(label="all document chunks processed", state="complete")
 
+with st.form("report-form"):
+    reports_to_delete = st.multiselect(options=existing_sources,
+                                       label="Select the reports you want to delete from the datastore.")
+    submitted = st.form_submit_button("Delete")
+    if submitted:
+        for i in reports_to_delete:
+            st.write(delete_report(i))
+            st.write(f"{i} successfully removed from Elasticsearch. All benchmarking data remains intact.")
