@@ -461,8 +461,7 @@ with col1:
     st.session_state['model_temp'] = st.select_slider('Select your model temperature:', options=model_temp_options,value=st.session_state.model_temp)
     st.header("Create benchmark data")
     benchmark_questions = get_questions_answers(benchmarking_qa_index, report_source)
-    if benchmark_questions:
-        benchmark = st.button("Generate data for a benchmark test")
+    benchmark = st.button("Generate data for a benchmark test")
 
 with col2:
     if benchmark:
