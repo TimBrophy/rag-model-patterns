@@ -31,6 +31,10 @@ logging_index = os.environ['logging_index']
 source_pipeline = os.environ['default_pipeline']
 logging_pipeline = os.environ['logging_pipeline']
 benchmarking_index = os.environ['benchmarking_index']
+benchmarking_qa_index = os.environ['benchmarking_qa_index']
+
+if 'model_temp' not in st.session_state:
+    st.session_state['model_temp'] = 0
 
 model_provider_map = [
     {
@@ -318,14 +322,28 @@ def num_tokens_from_string(string: str, encoding_name: str) -> int:
     num_tokens = len(encoding.encode(string))
     return num_tokens
 
+def get_questions_answers(index, source):
+    query = {
+        "match": {
+            "source_name": source
+        }
+    }
 
-def get_questions_answers(filename):
-    data = []
-    with open('files/' + filename, mode='r', newline='') as file:
-        reader = csv.DictReader(file)
-        for row in reader:
-            data.append(row)
-    return data
+    field_list = ['question', 'ground_truth']
+    results = es.search(index=index, query=query, size=100, fields=field_list, track_scores=True)
+    response_data = [{"_id": hit["_id"], "_score": hit["_score"], **hit["_source"]} for hit in results["hits"]["hits"]]
+    documents = []
+    # Check if there are hits
+    if "hits" in results and "total" in results["hits"]:
+        total_hits = results["hits"]["total"]
+        # Check if there are any hits with a value greater than 0
+        if isinstance(total_hits, dict) and "value" in total_hits and total_hits["value"] > 0:
+            for hit in response_data:
+                doc_data = {field: hit[field] for field in field_list if field in hit}
+                doc_data["_id"] = hit["_id"]  # Include the document ID in the document data
+                documents.append(doc_data)
+    return documents
+
 
 
 model_list = []
@@ -342,10 +360,7 @@ st.session_state['pattern_name'] = ""
 st.session_state['model_name'] = ""
 
 
-def execute_benchmark():
-    # get questions and answers
-    questions_answers = get_questions_answers(qa_filename)
-    # loop through qa pair
+def execute_benchmark(questions_answers):
     with st.status("looping through questions", expanded=True) as status:
         for qa in questions_answers:
             question = qa['question']
@@ -423,13 +438,14 @@ st.set_page_config(
 )
 
 st.sidebar.page_link("app.py", label="Home")
-st.sidebar.page_link("pages/import.py", label="Manage reports/data sources")
+st.sidebar.page_link("pages/import.py", label="Manage reports/documents")
+st.sidebar.page_link("pages/benchmark_data_setup.py", label="Manage benchmark questions")
 st.sidebar.page_link("pages/benchmark.py", label="Run a benchmark test")
 st.sidebar.page_link("pages/setup.py", label="Setup your Elastic environment")
 st.sidebar.page_link(os.environ['kibana_url'], label="Kibana")
 
 
-
+st.title('Beyond RAG: Prompt techniques, measurement and cost control')
 col1, col2 = st.columns([1, 3])
 with col1:
     st.header("Set your parameters")
@@ -442,12 +458,15 @@ with col1:
     #         st.write(pattern['description'])
     report_source = st.selectbox("Choose your source document", get_sources(source_index))
     model_temp_options = [i/100 for i in range(0, 101, 5)]
-    st.session_state['model_temp'] = st.select_slider('Select your model temperature:', options=model_temp_options)
-    benchmark = st.button("Create benchmark data")
+    st.session_state['model_temp'] = st.select_slider('Select your model temperature:', options=model_temp_options,value=st.session_state.model_temp)
+    st.header("Create benchmark data")
+    benchmark_questions = get_questions_answers(benchmarking_qa_index, report_source)
+    if benchmark_questions:
+        benchmark = st.button("Generate data for a benchmark test")
 
 with col2:
     if benchmark:
-        execute_benchmark()
+        execute_benchmark(benchmark_questions)
     st.header("Conversational document search")
     # Accept user input
     question = st.text_input("Ask a question")
@@ -461,26 +480,31 @@ with col2:
         if results:
             if st.session_state.pattern_name == 'zero-shot-rag':
                 st.write("assistant: 🤖")
-                prompt_construct = prompt_builder(question=question, results=results,
-                                                  pattern=st.session_state.pattern_name)
-                sent_time = datetime.now(tz=timezone.utc)
-                response = st.write_stream(
-                    yield_response(llm=llm, prompt=prompt_construct))
-                received_time = datetime.now(tz=timezone.utc)
-                # Log the interaction
-                log_llm_interaction(question, prompt_construct, response, sent_time, received_time,
+                with st.status("reaching out to the llm...", expanded=True) as status:
+                    prompt_construct = prompt_builder(question=question, results=results,
+                                                      pattern=st.session_state.pattern_name)
+                    sent_time = datetime.now(tz=timezone.utc)
+                    response = st.write_stream(
+                        yield_response(llm=llm, prompt=prompt_construct))
+                    received_time = datetime.now(tz=timezone.utc)
+                    status.update(label="response generated", state="complete")
+                    # Log the interaction
+                    log_llm_interaction(question, prompt_construct, response, sent_time, received_time,
                                     report_source)
+
 
             elif st.session_state.pattern_name == 'few-shot-rag':
                 st.write("assistant: 🤖")
-                prompt_construct = prompt_builder(question=question, results=results,
-                                                  pattern=st.session_state.pattern_name)
-                sent_time = datetime.now(tz=timezone.utc)
-                response = st.write_stream(
-                    yield_response(llm=llm, prompt=prompt_construct))
-                received_time = datetime.now(tz=timezone.utc)
-                # Log the interaction
-                log_llm_interaction(question, prompt_construct, response, sent_time, received_time,
+                with st.status("reaching out to the llm...", expanded=True) as status:
+                    prompt_construct = prompt_builder(question=question, results=results,
+                                                      pattern=st.session_state.pattern_name)
+                    sent_time = datetime.now(tz=timezone.utc)
+                    response = st.write_stream(
+                        yield_response(llm=llm, prompt=prompt_construct))
+                    received_time = datetime.now(tz=timezone.utc)
+                    status.update(label="response generated", state="complete")
+                    # Log the interaction
+                    log_llm_interaction(question, prompt_construct, response, sent_time, received_time,
                                     report_source)
 
             elif st.session_state.pattern_name == 'reflection-rag':

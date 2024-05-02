@@ -15,7 +15,8 @@ chunk_size_options = ['128', '256', '512', '1024']
 source_index = os.environ['default_index']
 
 st.sidebar.page_link("app.py", label="Home")
-st.sidebar.page_link("pages/import.py", label="Manage reports/data sources")
+st.sidebar.page_link("pages/import.py", label="Manage reports/documents")
+st.sidebar.page_link("pages/benchmark_data_setup.py", label="Manage benchmark questions")
 st.sidebar.page_link("pages/benchmark.py", label="Run a benchmark test")
 st.sidebar.page_link("pages/setup.py", label="Setup your Elastic environment")
 st.sidebar.page_link(os.environ['kibana_url'], label="Kibana")
@@ -61,7 +62,7 @@ def delete_report(report):
 
 st.title("Document uploader")
 source_name = st.text_input("Source document name")
-uploaded_file = st.file_uploader("Choose a file:")
+uploaded_file = st.file_uploader("Choose a PDF document:")
 chunk_size = st.select_slider('Select your document chunk size (in words):', options=chunk_size_options)
 chunk_size = int(chunk_size)
 chunk_overlap = chunk_size/5
@@ -73,7 +74,7 @@ text_splitter = CharacterTextSplitter(
     is_separator_regex=False,
 )
 
-st.subheader("Existing data sources:")
+
 existing_sources = get_sources(source_index)
 
 if uploaded_file is not None:
@@ -108,12 +109,13 @@ if uploaded_file is not None:
                             st.write(chunked_text)
                     counter = counter + 1
             status.update(label="all document chunks processed", state="complete")
-
-with st.form("report-form"):
-    reports_to_delete = st.multiselect(options=existing_sources,
-                                       label="Select the reports you want to delete from the datastore.")
-    submitted = st.form_submit_button("Delete")
-    if submitted:
-        for i in reports_to_delete:
-            st.write(delete_report(i))
-            st.write(f"{i} successfully removed from Elasticsearch. All benchmarking data remains intact.")
+if existing_sources:
+    st.subheader("Existing data sources:")
+    with st.form("report-form"):
+        reports_to_delete = st.multiselect(options=existing_sources,
+                                           label="Select the reports you want to delete from the datastore.")
+        submitted = st.form_submit_button("Delete")
+        if submitted:
+            for i in reports_to_delete:
+                st.write(delete_report(i))
+                st.write(f"{i} successfully removed from Elasticsearch. All benchmarking data remains intact.")

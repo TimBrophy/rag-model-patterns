@@ -10,6 +10,7 @@ logging_index = os.environ['logging_index']
 source_pipeline = os.environ['default_pipeline']
 logging_pipeline = os.environ['logging_pipeline']
 benchmarking_index = os.environ['benchmarking_index']
+benchmarking_qa_index = os.environ['benchmarking_qa_index']
 benchmarking_results_index = os.environ['benchmarking_results_index']
 
 def read_json_file(file_path):
@@ -23,6 +24,7 @@ source_index_settings = read_json_file(f'config/{source_index}-settings.json')
 logging_index_mapping = read_json_file(f'config/{logging_index}-mapping.json')
 logging_index_settings = read_json_file(f'config/{source_index}-mapping.json')
 benchmarking_index_mapping = read_json_file(f'config/{benchmarking_index}-mapping.json')
+benchmarking_qa_index_mapping = read_json_file(f'config/{benchmarking_qa_index}-mapping.json')
 benchmarking_results_index_mapping = read_json_file(f'config/{benchmarking_index}-mapping.json')
 source_pipeline_config = read_json_file(f'config/{source_pipeline}.json')
 # logging_pipeline_config = read_json_file(f'config/{logging_pipeline}.json')
@@ -53,6 +55,14 @@ def check_indices():
     elif benchmarking_exists:
         task_report.append("Benchmarking index exists already")
 
+    benchmarking_qa_exists = es.indices.exists(index=benchmarking_qa_index)
+    if not benchmarking_qa_exists:
+        benchmarking_qa_result = es.indices.create(index=benchmarking_qa_index, mappings=benchmarking_qa_index_mapping,
+                                           settings=source_index_settings)
+        task_report.append(benchmarking_qa_result)
+    elif benchmarking_exists:
+        task_report.append("Benchmarking qa index exists already")
+
     benchmarking_results_exists = es.indices.exists(index=benchmarking_results_index)
     if not benchmarking_results_exists:
         benchmarking_results_result = es.indices.create(index=benchmarking_results_index, mappings=benchmarking_results_index_mapping,
@@ -74,6 +84,8 @@ def delete_indices():
     task_report.append(benchmarking_result)
     benchmarking_results_result = es.indices.delete(index=benchmarking_results_index)
     task_report.append(benchmarking_results_result)
+    benchmarking_qa_result = es.indices.delete(index=benchmarking_qa_index)
+    task_report.append(benchmarking_qa_result)
     return task_report
 
 
@@ -96,7 +108,8 @@ def check_pipelines():
     return task_report
 
 st.sidebar.page_link("app.py", label="Home")
-st.sidebar.page_link("pages/import.py", label="Manage reports/data sources")
+st.sidebar.page_link("pages/import.py", label="Manage reports/documents")
+st.sidebar.page_link("pages/benchmark_data_setup.py", label="Manage benchmark questions")
 st.sidebar.page_link("pages/benchmark.py", label="Run a benchmark test")
 st.sidebar.page_link("pages/setup.py", label="Setup your Elastic environment")
 st.sidebar.page_link(os.environ['kibana_url'], label="Kibana")

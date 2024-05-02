@@ -1,0 +1,26 @@
+{
+    "properties": {
+        "@timestamp": {
+            "type": "date"
+        },
+        "question": {
+            "type": "text",
+            "fields": {
+                "keyword": {
+                    "type": "keyword"
+                }
+            }
+        },
+        "ground_truth": {
+            "type": "text",
+            "fields": {
+                "keyword": {
+                    "type": "keyword"
+                }
+            }
+        },
+        "source_name": {
+            "type": "keyword"
+        }
+    }
+}

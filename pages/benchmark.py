@@ -121,7 +121,8 @@ def build_dataset(source_name):
 
 
 st.sidebar.page_link("app.py", label="Home")
-st.sidebar.page_link("pages/import.py", label="Manage reports/data sources")
+st.sidebar.page_link("pages/import.py", label="Manage reports/documents")
+st.sidebar.page_link("pages/benchmark_data_setup.py", label="Manage benchmark questions")
 st.sidebar.page_link("pages/benchmark.py", label="Run a benchmark test")
 st.sidebar.page_link("pages/setup.py", label="Setup your Elastic environment")
 st.sidebar.page_link(os.environ['kibana_url'], label="Kibana")
