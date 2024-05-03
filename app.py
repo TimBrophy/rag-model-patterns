@@ -255,7 +255,7 @@ def prompt_builder(question, pattern, results=None, answer=None, reflection=None
         prompt_file = 'prompts/auto_prompt_engineer.txt'
         with open(prompt_file, "r") as file:
             prompt_contents_template = file.read()
-            prompt = prompt_contents_template.format(question=question)
+            prompt = prompt_contents_template.format(question=question, context=context_documents)
         augmented_prompt = prompt
     elif pattern == 'generated-prompt':
         prompt_file = 'prompts/guided-rag-with-generated-prompt.txt'
@@ -408,7 +408,7 @@ def execute_benchmark(questions_answers):
                                    report_name=report_source,
                                    answer=answer3)
             elif st.session_state.pattern_name == 'auto-prompt-engineer':
-                prompt_construct1 = prompt_builder(question=question, pattern=st.session_state.pattern_name)
+                prompt_construct1 = prompt_builder(question=question, pattern=st.session_state.pattern_name, results=results)
                 llm = llm_response(st.session_state.provider_name)
                 sent_time = datetime.now(tz=timezone.utc)
                 answer1 = bulk_response(llm=llm, prompt=prompt_construct1)
@@ -550,7 +550,7 @@ with col2:
 
             elif st.session_state.pattern_name == 'auto-prompt-engineer':
                 st.write("prompt engineer: 🤖")
-                prompt_construct = prompt_builder(question=question, pattern=st.session_state.pattern_name)
+                prompt_construct = prompt_builder(question=question, pattern=st.session_state.pattern_name, results=results)
                 with st.status("building a prompt...", expanded=True) as status:
                     sent_time = datetime.now(tz=timezone.utc)
                     response1 = st.write_stream(

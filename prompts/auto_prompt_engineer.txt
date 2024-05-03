@@ -3,13 +3,12 @@ A user has asked the following question:
 {question}
 Do not answer the question, but create a prompt that an LLM can use in order to answer the question most accurately
 based on the context provided, which is the result of a search within a knowledge base.
-The knowledge base consists of records on the following format:
-"page": <page number>
-"text": <information is here>
-The text contains information such as facts, dates and numbers indicating things like financial metrics,
-performance metrics, environmental statistics. You may be asked to calculate values contained in this report.
-The LLM should not calculate the answer but rather propose the equation required to solve the question.
-Detail each step required and present it as a prompt to an LLM.
+Here is the context we are going to give to the model:
+{context}
+
+Based on the question you will need to instruct the LLM on how best to answer it, this could include instructing the LLM
+ how to calculate a value or how to summarize an answer etc.
+
 The LLM cannot use any information that is not contained in the context and must always cite a source.
 Instruct the LLM to format its response in markdown.
 """
