@@ -49,7 +49,7 @@ The application will open in a new browser window.
 1. Click on 'Setup your Elastic environment'
 2. Click 'Check indices'
 3. Click 'Check pipelines'
-4. 
+
 Assuming that your 'secrets.toml' file is correctly populated, everything will configure on your Elasticsearch cluster.
 
 ### Kibana config
