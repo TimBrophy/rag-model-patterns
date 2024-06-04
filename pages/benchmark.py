@@ -120,6 +120,18 @@ def build_dataset(source_name):
     return data
 
 
+def delete_benchmark_data(source_name):
+    delete_query = {
+        "term": {
+            "report_name": {
+                "value": source_name
+            }
+        }
+    }
+    es.delete_by_query(index=benchmarking_index, query=delete_query)
+    return
+
+
 st.sidebar.page_link("app.py", label="Home")
 st.sidebar.page_link("pages/import.py", label="Manage reports/documents")
 st.sidebar.page_link("pages/benchmark_data_setup.py", label="Manage benchmark questions")
@@ -135,6 +147,7 @@ view_results = st.button("View test data")
 if view_results:
     st.dataframe(dataset)
 evaluate_go = st.button("Evaluate your results and import them to Elastic")
+
 if evaluate_go:
     ragas_result = evaluate(
         dataset,
@@ -169,3 +182,4 @@ if evaluate_go:
             row['answer_correctness']
         )
     st.dataframe(result_df)
+    delete_benchmark_data(report_source)

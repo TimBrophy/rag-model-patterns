@@ -6,7 +6,7 @@ from elasticsearch import Elasticsearch
 import os
 import math
 import tiktoken
-from langchain_community.chat_models import BedrockChat, AzureChatOpenAI
+from langchain_community.chat_models import BedrockChat, AzureChatOpenAI, ChatOllama
 
 from langchain.schema import (
     SystemMessage,
@@ -16,14 +16,8 @@ import nltk
 from nltk.tokenize import word_tokenize
 import time
 import boto3
-import csv
 import pandas as pd
 
-# BASE_URL = os.environ['openai_api_base']
-# API_KEY = os.environ['openai_api_key']
-# DEPLOYMENT_NAME = os.environ['deployment_name']
-# TRANSFORMER_MODEL = os.environ['transformer_model']
-qa_filename = os.environ['qa_filename']
 
 es = Elasticsearch(os.environ['elastic_url'], api_key=os.environ['elastic_api_key'])
 source_index = os.environ['default_index']
@@ -38,16 +32,22 @@ if 'model_temp' not in st.session_state:
 
 model_provider_map = [
     {
-        'model_name': 'claude v2',
+        'model_name': 'claude v2:1',
         'provider_name': 'AWS Bedrock',
         'prompt': 0.008,
         'response': 0.024
     },
     {
-        'model_name': 'gpt-35-turbo',
+        'model_name': 'gpt-4o',
         'provider_name': 'Azure OpenAI',
-        'prompt': 0.0005,
-        'response': 0.0015
+        'prompt': 0.06,
+        'response': 0.12
+    },
+    {
+        'model_name': 'llama3',
+        'provider_name': 'Ollama',
+        'prompt': 0,
+        'response': 0
     }
 ]
 pattern_explainer_map = [
@@ -66,7 +66,7 @@ pattern_explainer_map = [
     },
     {
         'pattern_name': 'auto-prompt-engineer',
-        'description': 'question --> vectorsearch --> design prompt --> prompt + context --> response --> output'
+        'description': 'question --> vectorsearch --> design prompt + context --> prompt + context --> response --> output'
     },
 ]
 
@@ -110,7 +110,9 @@ def llm_response(provider_name):
             model_id=os.environ['aws_model_id'],
             streaming=True,
             model_kwargs={"temperature": st.session_state.model_temp})
-
+    elif provider_name == 'Ollama':
+        llm = ChatOllama(model='llama3',
+                         temperature=st.session_state.model_temp)
     return llm
 
 
@@ -356,8 +358,9 @@ for p in pattern_explainer_map:
     pattern_name = p['pattern_name']
     pattern_list.append(pattern_name)
 
-st.session_state['pattern_name'] = ""
-st.session_state['model_name'] = ""
+if 'pattern_name' and 'model_name' not in st.session_state:
+    st.session_state.pattern_name = pattern_list[0]
+    st.session_state.model_name = model_list[0]
 
 
 def execute_benchmark(questions_answers):
@@ -431,7 +434,7 @@ def execute_benchmark(questions_answers):
 
 
 st.set_page_config(
-    page_title="Document reader",
+    page_title="RAG workbench",
     page_icon="🧊",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -443,33 +446,23 @@ st.sidebar.page_link("pages/benchmark_data_setup.py", label="Manage benchmark qu
 st.sidebar.page_link("pages/benchmark.py", label="Run a benchmark test")
 st.sidebar.page_link("pages/setup.py", label="Setup your Elastic environment")
 st.sidebar.page_link(os.environ['kibana_url'], label="Kibana")
+st.image('files/production_line_rag.png', width=1000)
 
-
-st.title('Beyond RAG: Prompt techniques, measurement and cost control')
 col1, col2 = st.columns([1, 3])
 with col1:
-    st.header("Set your parameters")
-    st.session_state['pattern_name'] = st.selectbox('Choose a prompt template', pattern_list)
-    st.session_state['model_name'] = st.selectbox('Choose a model', model_list)
-    st.session_state['provider_name'] = get_provider_from_model(st.session_state.model_name)
-    # for pattern in pattern_explainer_map:
-    #     if pattern['pattern_name'] == st.session_state['pattern_name']:
-    #         st.write('Prompt workflow:')
-    #         st.write(pattern['description'])
+    st.session_state.pattern_name = st.selectbox('Choose a prompt template', pattern_list, index=pattern_list.index(st.session_state.pattern_name))
+    st.session_state.model_name = st.selectbox('Choose a model', model_list, index=model_list.index(st.session_state.model_name))
+    st.session_state.provider_name = get_provider_from_model(st.session_state.model_name)
+
     report_source = st.selectbox("Choose your source document", get_sources(source_index))
     model_temp_options = [i/100 for i in range(0, 101, 5)]
     st.session_state['model_temp'] = st.select_slider('Select your model temperature:', options=model_temp_options,value=st.session_state.model_temp)
-    st.header("Create benchmark data")
     benchmark_questions = get_questions_answers(benchmarking_qa_index, report_source)
     benchmark = st.button("Generate data for a benchmark test")
 
 with col2:
-    if benchmark:
-        execute_benchmark(benchmark_questions)
-    st.header("Conversational document search")
-    # Accept user input
-    question = st.text_input("Ask a question")
-    submit = st.button("Ask the assistant")
+    question = st.text_input("Search your document with a question")
+    submit = st.button("Run the RAG pipeline")
     if submit:
 
         results = report_search(source_index, question, report_source)
@@ -573,3 +566,6 @@ with col2:
             st.dataframe(df_results)
         else:
             st.write("your search yielded zero results")
+
+    elif benchmark:
+        execute_benchmark(benchmark_questions)

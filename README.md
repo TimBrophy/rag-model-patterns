@@ -21,7 +21,34 @@ effectively here: https://cloud.elastic.co. Node sizes can align to the followin
    4. 1GB RAM in 1 zone for Kibana 
    5. Enable the .elser_model_2_linux-x86_64 model in the Trained Models section of Kibana. Most likely this will be a download, and then deploy operation.
 
-3. Access to an LLM hosted with either AWS, Azure or both. (and of course the associated credentials) 
+3. Access to one of the following instances of an LLM (+all credentials):
+   1. Azure OpenAI
+   2. AWS Bedrock
+   3. Locally hosted Ollama LLM
+   You must specify in the app.py which models you have configured in the 'model_provider_map'.
+   
+```
+model_provider_map = [
+    {
+        'model_name': 'claude v2:1',
+        'provider_name': 'AWS Bedrock',
+        'prompt': 0.008,
+        'response': 0.024
+    },
+    {
+        'model_name': 'gpt-4o',
+        'provider_name': 'Azure OpenAI',
+        'prompt': 0.06,
+        'response': 0.12
+    },
+    {
+        'model_name': 'llama3',
+        'provider_name': 'Ollama',
+        'prompt': 0,
+        'response': 0
+    }
+]
+```
 
 ## Setup
 Download the contents of the repo to your local computer.
@@ -31,9 +58,10 @@ Activate the environment and install dependencies using the following command:
 $ pip install -r requirements.txt
 ````
 
-
 Copy the secrets-example.txt file in the 'config' folder and create a file called secrets.toml in the '.streamlit' folder.
-Complete all the details required, with at least one set of LLM credentials. Bear in mind that whichever LLM provider you choose **not** to use, you need to comment that option out in the dropdown or remove the LLM dropdown completely from the app.py file. I would recommend using BOTH integrations so that you can have fun comparing answers. 
+Complete all the details required, with at least one set of LLM credentials. Bear in mind that whichever LLM provider you choose **not** to use, you need to remove that model and provider from the model map.
+At this stage for the Ragas evaluation to work the app only supports an Azure OpenAI llm and embedding model.
+Modifying the code to leverage another form of model and embedding pair should be straightforward if you consult the [documentation](https://docs.ragas.io/en/stable/index.html).
 
 ## Run
 Issue the command: 
@@ -53,8 +81,8 @@ The application will open in a new browser window.
 Assuming that your 'secrets.toml' file is correctly populated, everything will configure on your Elasticsearch cluster.
 
 ### Kibana config
-In the 'files' folder of the app you will find an 'export.ndjson' file. This is a Kibana Saved Object, which can be imported into your cluster by following the following instructions:  
-https://www.elastic.co/guide/en/kibana/current/managing-saved-objects.html#managing-saved-objects-export-objects
+In the 'files' folder of the app you will find an 'export.ndjson' file. This is a Kibana Saved Object, which can be imported 
+into your cluster by following these [instructions](https://www.elastic.co/guide/en/kibana/current/managing-saved-objects.html#managing-saved-objects-export-objects).
 
 ### Data setup
 1. Click on 'Manage reports/documents'
@@ -63,7 +91,7 @@ https://www.elastic.co/guide/en/kibana/current/managing-saved-objects.html#manag
 4. Select the chunk size that will be used to carve the document up into smaller pieces of text.
 
 ### Benchmarking setup
-In order to execute a benchmark test, the project utilises the RAGAS framework: https://docs.ragas.io/en/stable/index.html
+In order to execute a benchmark test, the project utilises the RAGAS [framework](https://docs.ragas.io/en/stable/index.html)
 
 Ragas executes a series of tests to determine the accuracy of the RAG pipeline across a number of metrics. 
 
@@ -76,11 +104,13 @@ answer_similarity,
 context_recall,
 answer_correctness
 ````
-For more information on the meaning of each of those metrics, please consult the Ragas docs. 
+For more information on the meaning of each of those metrics, please consult the Ragas [docs](https://docs.ragas.io/en/stable/index.html). 
 
 In order to run the benchmark you will need to generate a set of questions and ground truths which apply to the document you have imported. You can manage these via the menu item: 'Manage benchmark questions'
 
 This page lets you add and remove benchmark questions and ground truths, but you cannot edit them. You can add as many as you like, but it is really important that they are relevant to the document you are associating them with or the benchmarking will not be successful.
+*Really Important:* The ground_truths should be more than straightfoward copy/paste elements out of the text, as your evaluation will really just test the context and not the ability of the LLM to synthesise information into a response.
+
 
 ### Using the app
 I think everything is self-explanatory in the app itself once you have the data setup you need in order to make the workbench operate successfully. 
