@@ -478,7 +478,7 @@ st.sidebar.page_link("pages/benchmark_data_setup.py", label="Manage benchmark qu
 st.sidebar.page_link("pages/benchmark.py", label="Run a benchmark test")
 st.sidebar.page_link("pages/setup.py", label="Setup your Elastic environment")
 st.sidebar.page_link(os.environ['kibana_url'], label="Kibana")
-st.image('files/rag_header.png', width=500)
+st.image('files/graph_header.png', width=450)
 
 # We now handle the form and layout and mix it in with some application logic (not ideal but this is Streamlit)
 col1, col2 = st.columns([1, 3])
@@ -493,9 +493,11 @@ with col1:
     model_temp_options = [i / 100 for i in range(0, 101, 5)]
     st.session_state['model_temp'] = st.select_slider('Select your model temperature:', options=model_temp_options,
                                                       value=st.session_state.model_temp)
-    benchmark_questions = get_questions_answers(benchmarking_qa_index, report_source)
-    benchmark = st.button("Generate data for a benchmark test")
-
+    if report_source:
+        benchmark_questions = get_questions_answers(benchmarking_qa_index, report_source)
+        benchmark = st.button("Generate data for a benchmark test")
+    else:
+        benchmark = ""
 with col2:
     question = st.text_input("Search your document with a question")
     submit = st.button("Run the RAG pipeline")

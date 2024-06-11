@@ -48,6 +48,7 @@ pip install -r requirements.txt
 ````
 Copy the secrets-example.txt file in the 'config' folder and create a file called secrets.toml in the '.streamlit' folder.
 Complete all the details required, with at least one set of LLM credentials. Bear in mind that whichever LLM provider you choose **not** to use, you need to remove that model from the secrets file.
+Also note that the Elastic API key needed is the one generated within Kibana > Stack management > Security
 
 ## Run
 Issue the command: 
