@@ -11,6 +11,8 @@ which is a rapid prototyping tool and not a production grade deployment platform
 3. We are using a Langchain library to split our document prior to ingest, but this could be done in an Elasticsearch pipeline itself if we wanted to do so.
 4. There is VERY LITTLE error handling in this code at the moment, so make sure the data setup is correct and your benchmark questions actually produce results for context.
 
+![app overview](files/readme.png)
+
 ## Prerequisites
 1. Python 3.10 or higher
 2. An Elasticsearch cluster, 8.14 or higher. The recommended option is an Elastic Cloud deployment which can be created easily and cost
@@ -77,6 +79,10 @@ into your cluster by following these [instructions](https://www.elastic.co/guide
 4. Select the chunk size that will be used to carve the document up into smaller pieces of text.
 
 ### Benchmarking setup
+
+![answer metrics](files/answer_1.png)
+![answer metrics](files/answer_2.png)
+
 In order to execute a benchmark test, the project utilises the RAGAS [framework](https://docs.ragas.io/en/stable/index.html)
 
 Ragas executes a series of tests to determine the accuracy of the RAG pipeline across a number of metrics.
@@ -104,3 +110,5 @@ This page lets you add and remove benchmark questions and ground truths, but you
 4. Once you've got these results you can navigate to the 'Run a benchmark test' page and view the current output of the data generation before you evaluate it through the Ragas pipeline. 
 5. If you run the evaluation, the metrics for the dataset as well as the dataset itself are copied to an index, and the original source is deleted.
 6. There is a Kibana link that will take you to your Kibana instance with the imported dashboard. It should be populated with the evaluation output.
+
+![multi stage prompt](files/prompt_chain.png)
