@@ -18,7 +18,7 @@ import time
 import boto3
 import pandas as pd
 
-
+# Initialise ES connection and configuration details
 es = Elasticsearch(os.environ['elastic_url'], api_key=os.environ['elastic_api_key'])
 source_index = os.environ['default_index']
 logging_index = os.environ['logging_index']
@@ -27,50 +27,79 @@ logging_pipeline = os.environ['logging_pipeline']
 benchmarking_index = os.environ['benchmarking_index']
 benchmarking_qa_index = os.environ['benchmarking_qa_index']
 
+# Handle some Streamlit setup
+st.set_page_config(
+    page_title="RAG workbench",
+    page_icon="🧊",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+# Initialise the model temperature session variable
 if 'model_temp' not in st.session_state:
     st.session_state['model_temp'] = 0
 
-model_provider_map = [
-    {
-        'model_name': 'claude v2:1',
-        'provider_name': 'AWS Bedrock',
-        'prompt': 0.008,
-        'response': 0.024
-    },
-    {
-        'model_name': 'gpt-4o',
+# Check the configured providers in the secrets file and create the mapping needed later on
+model_provider_map = []
+if 'openai_api_model' in os.environ:
+    azure_openai_list_entry = {
+        'model_name': os.environ['openai_api_model'],
         'provider_name': 'Azure OpenAI',
         'prompt': 0.06,
         'response': 0.12
-    },
-    {
-        'model_name': 'llama3',
+    }
+    model_provider_map.append(azure_openai_list_entry)
+
+if 'aws_model_id' in os.environ:
+    aws_bedrock_list_entry = {
+        'model_name': os.environ['aws_model_id'],
+        'provider_name': 'AWS Bedrock',
+        'prompt': 0.008,
+        'response': 0.024
+    }
+    model_provider_map.append(aws_bedrock_list_entry)
+if 'ollama_chat_model' in os.environ:
+    ollama_list_entry = {
+        'model_name': os.environ['ollama_chat_model'],
         'provider_name': 'Ollama',
         'prompt': 0,
         'response': 0
     }
-]
+    model_provider_map.append(ollama_list_entry)
+
+# Initialise the explanation for the RAG pipelines and prompt techniques which get rendered in the main page
 pattern_explainer_map = [
     {
         'pattern_name': 'zero-shot-rag',
-        'description': 'question --> vectorsearch --> prompt with context --> response --> output'
+        'description': 'question --> hybrid search --> prompt with context --> response --> output'
     },
     {
         'pattern_name': 'few-shot-rag',
-        'description': 'question --> vectorsearch --> prompt with examples + context --> response --> output'
+        'description': 'question --> hybrid search --> prompt with examples + context --> response --> output'
     },
     {
         'pattern_name': 'reflection-rag',
-        'description': 'question --> vectorsearch --> prompt with examples + context --> response --> reflect --> '
+        'description': 'question --> hybrid search --> prompt with context --> response --> reflect --> '
                        're-prompt with reflection notes --> response --> output'
     },
     {
         'pattern_name': 'auto-prompt-engineer',
-        'description': 'question --> vectorsearch --> design prompt + context --> prompt + context --> response --> output'
+        'description': 'question --> hybrid search --> design prompt + context --> prompt + context --> response --> output'
     },
 ]
 
 
+# --------------- UTILITY FUNCTIONS ----------------
+
+# Calculate the number of tokens from a string of characters
+def num_tokens_from_string(string: str, encoding_name: str) -> int:
+    """Returns the number of tokens in a text string."""
+    encoding = tiktoken.get_encoding(encoding_name)
+    num_tokens = len(encoding.encode(string))
+    return num_tokens
+
+
+# Find the provider from the model name
 def get_provider_from_model(model_name):
     for p in model_provider_map:
         if p['model_name'] == model_name:
@@ -78,6 +107,23 @@ def get_provider_from_model(model_name):
     return provider
 
 
+# Find the description from the pattern name
+def get_pattern_from_name(pattern_name):
+    for p in pattern_explainer_map:
+        if p['pattern_name'] == pattern_name:
+            description = p['description']
+    return description
+
+
+# With this function we trim the context to fit into the LLMs context window
+def truncate_text(text, max_tokens):
+    nltk.download('punkt')
+    tokens = word_tokenize(text)
+    trimmed_text = ' '.join(tokens[:max_tokens])
+    return trimmed_text
+
+
+# Calculate the cost of the prompt or response for use in the logging of the LLM interaction
 def calculate_cost(message, type):
     for p in model_provider_map:
         if p['provider_name'] == st.session_state.provider_name:
@@ -89,7 +135,10 @@ def calculate_cost(message, type):
     return message_cost
 
 
-# Streamed response from LLM
+# --------------- RAG FLOW FUNCTIONS ----------------
+
+
+# Invoke the LLM object so that we can pass it a prompt
 def llm_response(provider_name):
     if provider_name == 'Azure OpenAI':
         llm = AzureChatOpenAI(
@@ -111,16 +160,18 @@ def llm_response(provider_name):
             streaming=True,
             model_kwargs={"temperature": st.session_state.model_temp})
     elif provider_name == 'Ollama':
-        llm = ChatOllama(model='llama3',
+        llm = ChatOllama(model=os.environ['ollama_chat_model'],
                          temperature=st.session_state.model_temp)
     return llm
 
 
+# Connect the LLM and the prompt together and receive the entire answer before proceeding
 def bulk_response(llm, prompt):
     answer = llm.invoke(prompt).content
     return answer
 
 
+# Connect the LLM and the prompt together and yield responses uniformly in 2ms intervals
 def yield_response(llm, prompt):
     for word in llm.invoke(prompt).content.split(" "):
         yield word + " "
@@ -153,6 +204,7 @@ def get_sources(index):
     return source_list
 
 
+# hybrid search operation combining a spare vector sematic search with lexical keyword search and a hard filter to search only data withih the selected document
 def report_search(index, question, source_name):
     model_id = os.environ['transformer_model']
     query = {
@@ -195,13 +247,7 @@ def report_search(index, question, source_name):
     return documents
 
 
-def truncate_text(text, max_tokens):
-    nltk.download('punkt')
-    tokens = word_tokenize(text)
-    trimmed_text = ' '.join(tokens[:max_tokens])
-    return trimmed_text
-
-
+# We use the search results to create the context for the LLM, eliminating unnecessary fields and lower relevance results
 def create_context_docs(results):
     for record in results:
         if "_score" in record:
@@ -215,18 +261,11 @@ def create_context_docs(results):
     return context_documents
 
 
+# Once we've gathered all the inputs and the context and construct a prompt based on the chosen pattern
 def prompt_builder(question, pattern, results=None, answer=None, reflection=None):
     if results:
-        for record in results:
-            if "_score" in record:
-                del record["_score"]
-        truncated_results = results[:5]
-        result = ""
-        for item in truncated_results:
-            result += f"Page {item['page']} : {item['text']}\n"
-        result = result.replace("{", "").replace("}", "")
-        context_documents = truncate_text(result, 10000)
-    # interact with the LLM
+        context_documents = create_context_docs(results)
+
     if pattern == 'zero-shot-rag':
         prompt_file = 'prompts/generic_rag_prompt.txt'
         with open(prompt_file, "r") as file:
@@ -274,6 +313,7 @@ def prompt_builder(question, pattern, results=None, answer=None, reflection=None
     return messages
 
 
+# We use this function to write the LLM interaction to an Elasticsearch logging index
 def log_llm_interaction(question, prompt, response, sent_time, received_time, report_name):
     log_id = uuid.uuid4()
     dt_latency = received_time - sent_time
@@ -299,6 +339,7 @@ def log_llm_interaction(question, prompt, response, sent_time, received_time, re
     return
 
 
+# This function logs the generated answer from an LLM which we will evaluate and generate metrics from
 def log_benchmark_test(question, ground_truth, context, answer, report_name):
     string_context = create_context_docs(context)
     log_id = uuid.uuid4()
@@ -317,13 +358,7 @@ def log_benchmark_test(question, ground_truth, context, answer, report_name):
     return
 
 
-def num_tokens_from_string(string: str, encoding_name: str) -> int:
-    """Returns the number of tokens in a text string."""
-    encoding = tiktoken.get_encoding(encoding_name)
-    print(string)
-    num_tokens = len(encoding.encode(string))
-    return num_tokens
-
+# Based on the datasource/document chosen, we pull the set of questions for benchmarking
 def get_questions_answers(index, source):
     query = {
         "match": {
@@ -347,7 +382,6 @@ def get_questions_answers(index, source):
     return documents
 
 
-
 model_list = []
 for m in model_provider_map:
     model_name = m['model_name']
@@ -363,12 +397,15 @@ if 'pattern_name' and 'model_name' not in st.session_state:
     st.session_state.model_name = model_list[0]
 
 
+# Run benchmarking questions through the chosen RAG pipeline
 def execute_benchmark(questions_answers):
+    total_count = len(questions_answers)
+    counter = 1
     with st.status("looping through questions", expanded=True) as status:
         for qa in questions_answers:
             question = qa['question']
             ground_truth = qa['ground_truth']
-            status_label = f"processing: {question}"
+            status_label = f"processing question {counter} of {total_count}: {question}"
             status.update(label=status_label, state="running")
             results = report_search(source_index, question, report_source)
 
@@ -411,7 +448,8 @@ def execute_benchmark(questions_answers):
                                    report_name=report_source,
                                    answer=answer3)
             elif st.session_state.pattern_name == 'auto-prompt-engineer':
-                prompt_construct1 = prompt_builder(question=question, pattern=st.session_state.pattern_name, results=results)
+                prompt_construct1 = prompt_builder(question=question, pattern=st.session_state.pattern_name,
+                                                   results=results)
                 llm = llm_response(st.session_state.provider_name)
                 sent_time = datetime.now(tz=timezone.utc)
                 answer1 = bulk_response(llm=llm, prompt=prompt_construct1)
@@ -428,47 +466,50 @@ def execute_benchmark(questions_answers):
                 log_benchmark_test(question=question, ground_truth=ground_truth, context=results,
                                    report_name=report_source,
                                    answer=answer2)
+            counter = counter + 1
         status.update(label="all questions processed", state="complete")
 
     return
 
-
-st.set_page_config(
-    page_title="RAG workbench",
-    page_icon="🧊",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
-
+# Define the sidebar for this page
 st.sidebar.page_link("app.py", label="Home")
 st.sidebar.page_link("pages/import.py", label="Manage reports/documents")
 st.sidebar.page_link("pages/benchmark_data_setup.py", label="Manage benchmark questions")
 st.sidebar.page_link("pages/benchmark.py", label="Run a benchmark test")
 st.sidebar.page_link("pages/setup.py", label="Setup your Elastic environment")
 st.sidebar.page_link(os.environ['kibana_url'], label="Kibana")
-st.image('files/production_line_rag.png', width=1000)
+st.image('files/rag_header.png', width=500)
 
+# We now handle the form and layout and mix it in with some application logic (not ideal but this is Streamlit)
 col1, col2 = st.columns([1, 3])
 with col1:
-    st.session_state.pattern_name = st.selectbox('Choose a prompt template', pattern_list, index=pattern_list.index(st.session_state.pattern_name))
-    st.session_state.model_name = st.selectbox('Choose a model', model_list, index=model_list.index(st.session_state.model_name))
+    st.session_state.pattern_name = st.selectbox('Choose a prompt template', pattern_list,
+                                                 index=pattern_list.index(st.session_state.pattern_name))
+    st.session_state.model_name = st.selectbox('Choose a model', model_list,
+                                               index=model_list.index(st.session_state.model_name))
     st.session_state.provider_name = get_provider_from_model(st.session_state.model_name)
 
     report_source = st.selectbox("Choose your source document", get_sources(source_index))
-    model_temp_options = [i/100 for i in range(0, 101, 5)]
-    st.session_state['model_temp'] = st.select_slider('Select your model temperature:', options=model_temp_options,value=st.session_state.model_temp)
+    model_temp_options = [i / 100 for i in range(0, 101, 5)]
+    st.session_state['model_temp'] = st.select_slider('Select your model temperature:', options=model_temp_options,
+                                                      value=st.session_state.model_temp)
     benchmark_questions = get_questions_answers(benchmarking_qa_index, report_source)
     benchmark = st.button("Generate data for a benchmark test")
 
 with col2:
     question = st.text_input("Search your document with a question")
     submit = st.button("Run the RAG pipeline")
+    pattern_description = get_pattern_from_name(st.session_state.pattern_name)
+    st.markdown("*The following RAG pattern will be applied:*")
+    st.markdown(f"*{pattern_description}*")
     if submit:
-
+        # Run the search for context
         results = report_search(source_index, question, report_source)
+        # Write the results to a dataframe so that they can be presented as supporting results below the LLM response
         df_results = pd.DataFrame(results)
+        # Connect to the relevant LLM
         llm = llm_response(st.session_state.provider_name)
-
+        # Execute the relevant prompt pattern
         if results:
             if st.session_state.pattern_name == 'zero-shot-rag':
                 st.write("assistant: 🤖")
@@ -482,7 +523,7 @@ with col2:
                     status.update(label="response generated", state="complete")
                     # Log the interaction
                     log_llm_interaction(question, prompt_construct, response, sent_time, received_time,
-                                    report_source)
+                                        report_source)
 
 
             elif st.session_state.pattern_name == 'few-shot-rag':
@@ -497,10 +538,10 @@ with col2:
                     status.update(label="response generated", state="complete")
                     # Log the interaction
                     log_llm_interaction(question, prompt_construct, response, sent_time, received_time,
-                                    report_source)
+                                        report_source)
 
             elif st.session_state.pattern_name == 'reflection-rag':
-                # initiate first prompt (actor)
+                # initiate first prompt
                 prompt_construct = prompt_builder(question=question, results=results, pattern='zero-shot-rag')
                 st.write("assistant: 🤖")
                 with st.status("generating the initial response...", expanded=True) as status:
@@ -516,6 +557,7 @@ with col2:
                 # now evaluate the original prompt
                 prompt_construct = prompt_builder(question=question, results=results, pattern='reflection-rag',
                                                   answer=response1)
+                # output the editorial response
                 st.write("editor:✍️")
                 with st.status("reviewing the initial response...", expanded=True) as status:
                     sent_time = datetime.now(tz=timezone.utc)
@@ -530,6 +572,7 @@ with col2:
                 # now process the recommendations
                 prompt_construct = prompt_builder(question=question, results=results, pattern='guided-rag',
                                                   answer=response1, reflection=response2)
+                # output the final resposne
                 st.write("assistant: 🤖")
                 with st.status("updating the response...", expanded=True) as status:
                     sent_time = datetime.now(tz=timezone.utc)
@@ -543,7 +586,9 @@ with col2:
 
             elif st.session_state.pattern_name == 'auto-prompt-engineer':
                 st.write("prompt engineer: 🤖")
-                prompt_construct = prompt_builder(question=question, pattern=st.session_state.pattern_name, results=results)
+                prompt_construct = prompt_builder(question=question, pattern=st.session_state.pattern_name,
+                                                  results=results)
+               # output the generated prompt
                 with st.status("building a prompt...", expanded=True) as status:
                     sent_time = datetime.now(tz=timezone.utc)
                     response1 = st.write_stream(
@@ -555,6 +600,7 @@ with col2:
                 st.write("assistant: 🤖")
                 prompt_construct = prompt_builder(question=question, pattern='generated-prompt', results=results,
                                                   reflection=response1)
+                # output the final answer
                 with st.status("attempting to answer the question...", expanded=True) as status:
                     sent_time = datetime.now(tz=timezone.utc)
                     response2 = st.write_stream(
@@ -566,6 +612,5 @@ with col2:
             st.dataframe(df_results)
         else:
             st.write("your search yielded zero results")
-
     elif benchmark:
         execute_benchmark(benchmark_questions)

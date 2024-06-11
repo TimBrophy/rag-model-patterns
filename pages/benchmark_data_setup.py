@@ -68,7 +68,7 @@ def delete_qa_entry(id):
 
 
 st.set_page_config(
-    page_title="Document reader",
+    page_title="RAG workbench: benchmark data setup",
     page_icon="🧊",
     layout="wide",
     initial_sidebar_state="expanded",

@@ -1,9 +1,10 @@
 import streamlit as st
 from elasticsearch import Elasticsearch
 import os
-from langchain_community.chat_models import AzureChatOpenAI
-from langchain_openai.embeddings import AzureOpenAIEmbeddings
+from langchain_community.chat_models import AzureChatOpenAI, ChatOllama, BedrockChat
+from langchain_community.embeddings import OllamaEmbeddings, AzureOpenAIEmbeddings
 import uuid
+import boto3
 from ragas.metrics import (
     answer_relevancy,
     faithfulness,
@@ -15,29 +16,52 @@ from ragas.metrics import (
 from ragas import evaluate
 from datasets import Dataset
 from datetime import timezone, datetime
-
-BASE_URL = os.environ['openai_api_base']
-API_KEY = os.environ['openai_api_key']
-DEPLOYMENT_NAME = os.environ['deployment_name']
-TRANSFORMER_MODEL = os.environ['transformer_model']
-
-azure_model = AzureChatOpenAI(
-    openai_api_base=os.environ['openai_api_base'],
-    openai_api_version=os.environ['openai_api_version'],
-    deployment_name=os.environ['deployment_name'],
-    openai_api_key=os.environ['openai_api_key'],
-    openai_api_type="azure",
-    temperature=0,
-    streaming=True
+# Set page parameters
+st.set_page_config(
+    page_title="RAG workbench: benchmark test",
+    page_icon="🧊",
+    layout="wide",
+    initial_sidebar_state="expanded",
 )
 
-azure_embeddings = AzureOpenAIEmbeddings(
-    openai_api_version=os.environ['openai_api_version'],
-    azure_endpoint=os.environ['openai_api_base'],
-    azure_deployment=os.environ['openai_embedding_deployment'],
-    model=os.environ['openai_embedding_model'],
-    openai_api_key=os.environ['openai_api_key']
-)
+# connect to the evaluation LLM
+llm_provider = os.environ['evaluation_llm_provider']
+
+if llm_provider == 'Azure OpenAI':
+    eval_llm = AzureChatOpenAI(
+        openai_api_base=os.environ['openai_api_base'],
+        openai_api_version=os.environ['openai_api_version'],
+        deployment_name=os.environ['deployment_name'],
+        openai_api_key=os.environ['openai_api_key'],
+        openai_api_type="azure",
+        temperature=0,
+        streaming=True
+    )
+elif llm_provider == 'AWS Bedrock':
+    bedrock_client = boto3.client(service_name="bedrock-runtime", region_name=os.environ['aws_region'],
+                                  aws_access_key_id=os.environ['aws_access_key'],
+                                  aws_secret_access_key=os.environ['aws_secret_key'])
+    eval_llm = BedrockChat(
+        client=bedrock_client,
+        model_id=os.environ['aws_model_id'],
+        streaming=True,
+        model_kwargs={"temperature": 0})
+elif llm_provider == 'Ollama':
+    eval_llm = ChatOllama(model=os.environ['ollama_chat_model'])
+
+# connect to the evaluation embedding model
+embedding_provider = os.environ['evaluation_embedding_provider']
+if embedding_provider == 'Azure OpenAI':
+    eval_embedding = AzureOpenAIEmbeddings(
+        azure_deployment=os.environ['evaluation_embedding_model_deployment'],
+        openai_api_base=os.environ['openai_api_base'],
+        openai_api_version=os.environ['openai_api_version'],
+        openai_api_key=os.environ['openai_api_key'],
+        openai_api_type="azure",
+    )
+elif embedding_provider == 'Ollama':
+    eval_embedding = OllamaEmbeddings(model=os.environ['evaluation_embedding_model'])
+
 
 benchmarking_index = os.environ['benchmarking_index']
 benchmarking_results_index = os.environ['benchmarking_results_index']
@@ -45,7 +69,7 @@ source_index = os.environ['default_index']
 
 es = Elasticsearch(os.environ['elastic_url'], api_key=os.environ['elastic_api_key'])
 
-
+# log the results of the benchmark test
 def log_benchmark_test_results(question, ground_truth, answer, contexts, model, pattern_name, provider, report_name,
                                context_precision, faithfulness, answer_relevancy, answer_similarity, context_recall,
                                answer_correctness):
@@ -70,7 +94,7 @@ def log_benchmark_test_results(question, ground_truth, answer, contexts, model, 
     es.index(index=benchmarking_results_index, id=log_id, document=body)
     return
 
-
+# Get the data sources in the report index so that the user can choose which one to run the evaluation on
 def get_sources(index):
     aggregation_query = {
         "size": 0,
@@ -95,7 +119,7 @@ def get_sources(index):
         source_list.append(key)
     return source_list
 
-
+# Build the dataset that will be evaluated based on the chose report/datasource
 def build_dataset(source_name):
     query = {
         "term": {
@@ -119,7 +143,7 @@ def build_dataset(source_name):
 
     return data
 
-
+# This function clears previously evaluated benchmark data so that we don't end up duplicating it
 def delete_benchmark_data(source_name):
     delete_query = {
         "term": {
@@ -131,7 +155,7 @@ def delete_benchmark_data(source_name):
     es.delete_by_query(index=benchmarking_index, query=delete_query)
     return
 
-
+# Define the sidebar
 st.sidebar.page_link("app.py", label="Home")
 st.sidebar.page_link("pages/import.py", label="Manage reports/documents")
 st.sidebar.page_link("pages/benchmark_data_setup.py", label="Manage benchmark questions")
@@ -159,8 +183,8 @@ if evaluate_go:
             context_recall,
             answer_correctness
         ],
-        llm=azure_model,
-        embeddings=azure_embeddings
+        llm=eval_llm,
+        embeddings=eval_embedding
     )
     result_df = ragas_result.to_pandas()
     result_df.fillna('', inplace=True)

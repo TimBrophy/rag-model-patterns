@@ -13,6 +13,7 @@ benchmarking_index = os.environ['benchmarking_index']
 benchmarking_qa_index = os.environ['benchmarking_qa_index']
 benchmarking_results_index = os.environ['benchmarking_results_index']
 
+
 def read_json_file(file_path):
     with open(file_path, 'r') as file:
         data = json.load(file)
@@ -27,7 +28,7 @@ benchmarking_index_mapping = read_json_file(f'config/{benchmarking_index}-mappin
 benchmarking_qa_index_mapping = read_json_file(f'config/{benchmarking_qa_index}-mapping.json')
 benchmarking_results_index_mapping = read_json_file(f'config/{benchmarking_index}-mapping.json')
 source_pipeline_config = read_json_file(f'config/{source_pipeline}.json')
-# logging_pipeline_config = read_json_file(f'config/{logging_pipeline}.json')
+
 
 def check_indices():
     task_report = []
@@ -50,7 +51,7 @@ def check_indices():
     benchmarking_exists = es.indices.exists(index=benchmarking_index)
     if not benchmarking_exists:
         benchmarking_result = es.indices.create(index=benchmarking_index, mappings=benchmarking_index_mapping,
-                                           settings=source_index_settings)
+                                                settings=source_index_settings)
         task_report.append(benchmarking_result)
     elif benchmarking_exists:
         task_report.append("Benchmarking index exists already")
@@ -58,15 +59,16 @@ def check_indices():
     benchmarking_qa_exists = es.indices.exists(index=benchmarking_qa_index)
     if not benchmarking_qa_exists:
         benchmarking_qa_result = es.indices.create(index=benchmarking_qa_index, mappings=benchmarking_qa_index_mapping,
-                                           settings=source_index_settings)
+                                                   settings=source_index_settings)
         task_report.append(benchmarking_qa_result)
     elif benchmarking_exists:
         task_report.append("Benchmarking qa index exists already")
 
     benchmarking_results_exists = es.indices.exists(index=benchmarking_results_index)
     if not benchmarking_results_exists:
-        benchmarking_results_result = es.indices.create(index=benchmarking_results_index, mappings=benchmarking_results_index_mapping,
-                                           settings=source_index_settings)
+        benchmarking_results_result = es.indices.create(index=benchmarking_results_index,
+                                                        mappings=benchmarking_results_index_mapping,
+                                                        settings=source_index_settings)
         task_report.append(benchmarking_results_result)
     elif benchmarking_results_exists:
         task_report.append("Benchmarking results index exists already")
@@ -106,6 +108,14 @@ def check_pipelines():
     #     pipeline_result = es.ingest.put_pipeline(id=logging_pipeline, processors=logging_pipeline_config)
     #     task_report.append(pipeline_result)
     return task_report
+
+
+st.set_page_config(
+    page_title="RAG workbench: cluster config",
+    page_icon="🧊",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
 st.sidebar.page_link("app.py", label="Home")
 st.sidebar.page_link("pages/import.py", label="Manage reports/documents")
