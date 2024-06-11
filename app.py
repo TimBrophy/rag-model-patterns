@@ -208,32 +208,46 @@ def get_sources(index):
 def report_search(index, question, source_name):
     model_id = os.environ['transformer_model']
     query = {
-        "bool": {
-            "should": [
-                {
-                    "text_expansion": {
-                        "ml.inference.text_expanded.predicted_value": {
-                            "model_id": model_id,
-                            "model_text": question
+            "rrf": {
+                "retrievers": [
+                    {
+                        "standard": {
+                            "filter": {
+                                "term": {
+                                    "source_name.keyword": source_name
+                                }
+                            }
+                        }
+                    },
+                    {
+                        "standard": {
+                            "query": {
+                                "term": {
+                                    "text": question
+                                }
+                            }
+                        }
+                    },
+                    {
+                        "standard": {
+                            "query": {
+                                "text_expansion": {
+                                    "ml.inference.text_expanded.predicted_value": {
+                                        "model_id": model_id,
+                                        "model_text": question
+                                    }
+                                }
+                            }
                         }
                     }
-                },
-                {
-                    "match": {
-                        "text": question
-                    }
-                }
-            ],
-            "filter": {
-                "term": {
-                    "source_name.keyword": source_name
-                }
+                ],
+                "window_size": 20,
+                "rank_constant": 1
             }
-        }
     }
 
     field_list = ['page', 'text', '_score']
-    results = es.search(index=index, query=query, size=100, fields=field_list, min_score=10)
+    results = es.search(index=index, retriever=query, size=10, fields=field_list)
     response_data = [{"_score": hit["_score"], **hit["_source"]} for hit in results["hits"]["hits"]]
     documents = []
     # Check if there are hits
