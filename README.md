@@ -34,9 +34,9 @@ https://cloud.elastic.co/registration?onboarding_token=vectorsearch&cta=cloud-re
 
 ## Setup
 Download the contents of the repo to your local computer.
-In the root directory of the project (most likely 'model-patterns') create a [python virtual environment](https://docs.python.org/3/library/venv.html).
+In the root directory of the project (most likely 'rag-model-patterns') create a [python virtual environment](https://docs.python.org/3/library/venv.html).
 ````
-python -m venv .venv
+python3 -m venv .venv
 ````
 Activate the environment (assuming MacOS):
 ````
