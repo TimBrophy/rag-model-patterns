@@ -14,5 +14,5 @@ Question:
 {question}.
 Context:
 {context_documents}
-Format your response using Markdown, highlighting important words in bold.
+Format your response using Markdown.
 """

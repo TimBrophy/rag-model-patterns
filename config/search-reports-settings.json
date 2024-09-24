@@ -6,5 +6,5 @@
             }
         }
     },
-    "mapping.total_fields.limit": 1000
+    "index.mapping.total_fields.limit": 5000
 }

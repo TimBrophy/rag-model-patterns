@@ -17,23 +17,8 @@
         "chunk_size": {
             "type": "integer"
         },
-        "ml": {
-            "properties": {
-                "inference": {
-                    "properties": {
-                        "text_expanded": {
-                            "properties": {
-                                "model_id": {
-                                    "type": "keyword"
-                                },
-                                "predicted_value": {
-                                    "type": "rank_features"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+        "text_expanded": {
+            "type": "sparse_vector"
         }
     }
 }

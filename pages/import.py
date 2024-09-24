@@ -109,12 +109,14 @@ if uploaded_file is not None:
                                     doc = {
                                         "source_name": source_name,
                                         "text": chunked_text,
+                                        "semantic_text": chunked_text,
                                         "page": selected_page + 1,
                                         "chunk_size": int(chunk_size),
                                         "_extract_binary_content": True,
                                         "_reduce_whitespace": True,
                                         "_run_ml_inference": True
                                     }
+                                    #response = es.index(index=report_index, id=doc_id, document=doc)
                                     response = es.index(index=report_index, id=doc_id, document=doc, pipeline=report_pipeline)
                                     st.write(chunked_text)
                             counter = counter + 1

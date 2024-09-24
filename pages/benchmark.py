@@ -16,6 +16,7 @@ from ragas.metrics import (
 from ragas import evaluate
 from datasets import Dataset
 from datetime import timezone, datetime
+
 # Set page parameters
 st.set_page_config(
     page_title="RAG workbench: benchmark test",
@@ -62,12 +63,12 @@ if embedding_provider == 'Azure OpenAI':
 elif embedding_provider == 'Ollama':
     eval_embedding = OllamaEmbeddings(model=os.environ['evaluation_embedding_model'])
 
-
 benchmarking_index = os.environ['benchmarking_index']
 benchmarking_results_index = os.environ['benchmarking_results_index']
 source_index = os.environ['default_index']
 
 es = Elasticsearch(os.environ['elastic_url'], api_key=os.environ['elastic_api_key'])
+
 
 # log the results of the benchmark test
 def log_benchmark_test_results(question, ground_truth, answer, contexts, model, pattern_name, provider, report_name,
@@ -94,6 +95,7 @@ def log_benchmark_test_results(question, ground_truth, answer, contexts, model, 
     es.index(index=benchmarking_results_index, id=log_id, document=body)
     return
 
+
 # Get the data sources in the report index so that the user can choose which one to run the evaluation on
 def get_sources(index):
     aggregation_query = {
@@ -119,6 +121,7 @@ def get_sources(index):
         source_list.append(key)
     return source_list
 
+
 # Build the dataset that will be evaluated based on the chose report/datasource
 def build_dataset(source_name):
     query = {
@@ -143,6 +146,7 @@ def build_dataset(source_name):
 
     return data
 
+
 # This function clears previously evaluated benchmark data so that we don't end up duplicating it
 def delete_benchmark_data(source_name):
     delete_query = {
@@ -154,6 +158,7 @@ def delete_benchmark_data(source_name):
     }
     es.delete_by_query(index=benchmarking_index, query=delete_query)
     return
+
 
 # Define the sidebar
 st.sidebar.page_link("app.py", label="Home")

@@ -232,7 +232,7 @@ def report_search(index, question, source_name):
                         "standard": {
                             "query": {
                                 "text_expansion": {
-                                    "ml.inference.text_expanded.predicted_value": {
+                                    "expanded_text": {
                                         "model_id": model_id,
                                         "model_text": question
                                     }
@@ -241,7 +241,7 @@ def report_search(index, question, source_name):
                         }
                     }
                 ],
-                "window_size": 20,
+                "rank_window_size": 20,
                 "rank_constant": 1
             }
     }
@@ -321,7 +321,10 @@ def prompt_builder(question, pattern, results=None, answer=None, reflection=None
         augmented_prompt = prompt
     messages = [
         SystemMessage(
-            content="You are a helpful assistant."),
+            content="You are a question/answer assistant. Your job is to answer user questions, using context "
+                    "provided in this prompt. The context is the result of a sematic search on a document "
+                    "and therefore represents extracts from the document that contains the information you need to "
+                    "answer the question"),
         HumanMessage(content=augmented_prompt)
     ]
     return messages
@@ -492,8 +495,7 @@ st.sidebar.page_link("pages/benchmark_data_setup.py", label="Manage benchmark qu
 st.sidebar.page_link("pages/benchmark.py", label="Run a benchmark test")
 st.sidebar.page_link("pages/setup.py", label="Setup your Elastic environment")
 st.sidebar.page_link(os.environ['kibana_url'], label="Kibana")
-st.image('files/graph_header.png', width=450)
-
+st.title("RAG workbench")
 # We now handle the form and layout and mix it in with some application logic (not ideal but this is Streamlit)
 col1, col2 = st.columns([1, 3])
 with col1:
@@ -560,7 +562,7 @@ with col2:
                 # initiate first prompt
                 prompt_construct = prompt_builder(question=question, results=results, pattern='zero-shot-rag')
                 st.write("assistant: 🤖")
-                with st.status("generating the initial response...", expanded=True) as status:
+                with st.status("generating the initial response...", expanded=False) as status:
                     sent_time = datetime.now(tz=timezone.utc)
                     response1 = st.write_stream(
                         yield_response(llm=llm, prompt=prompt_construct))
@@ -575,7 +577,7 @@ with col2:
                                                   answer=response1)
                 # output the editorial response
                 st.write("editor:✍️")
-                with st.status("reviewing the initial response...", expanded=True) as status:
+                with st.status("reviewing the initial response...", expanded=False) as status:
                     sent_time = datetime.now(tz=timezone.utc)
                     response2 = st.write_stream(
                         yield_response(llm=llm, prompt=prompt_construct))
@@ -590,7 +592,7 @@ with col2:
                                                   answer=response1, reflection=response2)
                 # output the final resposne
                 st.write("assistant: 🤖")
-                with st.status("updating the response...", expanded=True) as status:
+                with st.status("updating the response...", expanded=False) as status:
                     sent_time = datetime.now(tz=timezone.utc)
                     response3 = st.write_stream(
                         yield_response(llm=llm, prompt=prompt_construct))
@@ -605,7 +607,7 @@ with col2:
                 prompt_construct = prompt_builder(question=question, pattern=st.session_state.pattern_name,
                                                   results=results)
                # output the generated prompt
-                with st.status("building a prompt...", expanded=True) as status:
+                with st.status("building a prompt...", expanded=False) as status:
                     sent_time = datetime.now(tz=timezone.utc)
                     response1 = st.write_stream(
                         yield_response(llm=llm, prompt=prompt_construct))
@@ -613,8 +615,8 @@ with col2:
                     # Log the interaction
                     log_llm_interaction(question, prompt_construct, response1, sent_time, received_time,
                                         report_source)
-                st.write("assistant: 🤖")
-                prompt_construct = prompt_builder(question=question, pattern='generated-prompt', results=results,
+                    st.write("assistant: 🤖")
+                    prompt_construct = prompt_builder(question=question, pattern='generated-prompt', results=results,
                                                   reflection=response1)
                 # output the final answer
                 with st.status("attempting to answer the question...", expanded=True) as status:
@@ -625,6 +627,7 @@ with col2:
                     # Log the interaction
                     log_llm_interaction(question, prompt_construct, response2, sent_time, received_time,
                                         report_source)
+                    status.update(label="response generated", state="complete", expanded=True)
             st.dataframe(df_results)
         else:
             st.write("your search yielded zero results")

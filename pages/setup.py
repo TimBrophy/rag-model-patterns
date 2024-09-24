@@ -35,7 +35,7 @@ def check_indices():
 
     report_exists = es.indices.exists(index=source_index)
     if not report_exists:
-        report_result = es.indices.create(index=source_index, mappings=source_index_mapping)
+        report_result = es.indices.create(index=source_index, mappings=source_index_mapping, settings=source_index_settings)
         task_report.append(report_result)
     elif report_exists:
         task_report.append("Report index exists already")

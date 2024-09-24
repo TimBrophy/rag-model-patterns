@@ -1,7 +1,7 @@
 [
   {
     "remove": {
-      "field": "ml.inference.text_expanded",
+      "field": "text_expanded",
       "ignore_missing": true
     }
   },
@@ -11,6 +11,13 @@
         "text": "text_field"
       },
       "model_id": ".elser_model_2_linux-x86_64",
+      "inference_config": {
+        "classification": {
+          "num_top_classes": 2,
+          "results_field": "prediction",
+          "top_classes_results_field": "probabilities"
+        }
+      },
       "on_failure": [
         {
           "append": {
@@ -26,7 +33,7 @@
           }
         }
       ],
-      "target_field": "ml.inference.text_expanded"
+      "target_field": "text_expanded"
     }
   },
   {
